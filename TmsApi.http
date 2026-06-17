@@ -1,0 +1,12 @@
+@TmsApi_HostAddress = http://localhost:5053
+
+# 1. ይህንን በመላክ 401 Unauthorized ማግኘት አለብህ (ምክንያቱም ምንም ሄደር የለውም)
+GET {{TmsApi_HostAddress}}/api/assessments/results
+Accept: application/json
+
+###
+
+# 2. ይህንን በመላክ 200 OK ማግኘት አለብህ (ምክንያቱም X-Training-User ሄደር ስላለው)
+GET {{TmsApi_HostAddress}}/api/assessments/results
+Accept: application/json
+X-Training-User: Student123
