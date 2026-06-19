@@ -73,7 +73,6 @@ public interface IEnrollmentService
     Task<IReadOnlyList<EnrollmentRecord>> GetAllAsync();
     Task<bool> DeleteAsync(string id);
 }
-
 //--- የውሂብ ቅርጽ (The data shape)
 public record EnrollmentRecord(
     string Id,
@@ -120,4 +119,3 @@ public class EnrollmentService : IEnrollmentService
         return Task.FromResult(removed);
     }
 }
-public class TmsDatabaseException(string message) : Exception(message);
