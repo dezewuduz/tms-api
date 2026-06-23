@@ -62,7 +62,6 @@ public class ReportingController(TmsDbContext context) : ControllerBase
             .ToListAsync();
         return Ok(new { Approach = "NOT EXISTS", Students = list });
     }
-
     // 4B. Which students have zero enrollments? (LEFT JOIN)
     [HttpGet("unenrolled-students-leftjoin")]
     public async Task<IActionResult> GetUnenrolledStudentsLeftJoin()
@@ -78,4 +77,35 @@ public class ReportingController(TmsDbContext context) : ControllerBase
             .ToListAsync();
         return Ok(new { Approach = "LEFT JOIN", Students = list });
     }
-}
+    // TODO 1: Pagination
+    [HttpGet("students")]
+    public async Task<IActionResult> GetStudents(
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20,
+        CancellationToken ct = default)
+    {
+        Console.WriteLine($"\n>>> Pagination: page={page}, pageSize={pageSize}");
+        var students = await context.Students
+            .OrderBy(s => s.Name)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync(ct);
+        return Ok(students);
+    }
+    // TODO 2: Top 5 courses
+    [HttpGet("top-courses")]
+    public async Task<IActionResult> GetTopCourses(CancellationToken ct = default)
+    {
+        Console.WriteLine("\n>>> Top 5 courses by enrollment count...");
+        var courses = await context.Courses
+            .Select(c => new
+            {
+                c.Title,
+                EnrollmentCount = c.Enrollments.Count
+            })
+            .OrderByDescending(x => x.EnrollmentCount)
+            .Take(5)
+            .ToListAsync(ct);
+        return Ok(courses);
+    }
+} 

@@ -4,7 +4,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 
-//--- የውል ስምምነት (The contract)
+//--- (The contract)
 public interface IEnrollmentService
 {
     Task<EnrollmentRecord> EnrollAsync(string studentId, string courseCode);
@@ -13,14 +13,14 @@ public interface IEnrollmentService
     Task<bool> DeleteAsync(string id);
 }
 
-//--- የውሂብ ቅርጽ (The data shape)
+//---  (The data shape)
 public record EnrollmentRecord(
     string Id,
     string StudentId,
     string CourseCode,
     DateTime EnrolledAt);
 
-//--- በሜሞሪ ውስጥ የሚሰራ ትግበራ (The in-memory implementation)
+//--- (The in-memory implementation)
 public class EnrollmentService : IEnrollmentService
 {
     private readonly Dictionary<string, EnrollmentRecord> _store = new();
@@ -65,7 +65,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 
-//--- የውል ስምምነት (The contract)
+//--- (The contract)
 public interface IEnrollmentService
 {
     Task<EnrollmentRecord> EnrollAsync(string studentId, string courseCode);
@@ -73,14 +73,14 @@ public interface IEnrollmentService
     Task<IReadOnlyList<EnrollmentRecord>> GetAllAsync();
     Task<bool> DeleteAsync(string id);
 }
-//--- የውሂብ ቅርጽ (The data shape)
+//--- (The data shape)
 public record EnrollmentRecord(
     string Id,
     string StudentId,
     string CourseCode,
     DateTime EnrolledAt);
 
-//--- በሜሞሪ ውስጥ የሚሰራ ትግበራ (The in-memory implementation)
+//---  (The in-memory implementation)
 public class EnrollmentService : IEnrollmentService
 {
     private readonly Dictionary<string, EnrollmentRecord> _store = new();
