@@ -23,5 +23,14 @@ public class StudentConfiguration : IEntityTypeConfiguration<Student>
 
         builder.Property(s => s.IsActive)
                .IsRequired();
+
+        //Ex7   Shadow property — LastUpdated (DTO )
+        builder.Property<DateTime>("LastUpdated");
+      builder.Property<uint>("xmin")
+       .IsRowVersion()
+       .HasColumnName("xmin");
+
+        // Soft delete filter
+        builder.HasQueryFilter(s => !s.IsDeleted);
     }
 }

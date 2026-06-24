@@ -1,4 +1,5 @@
-﻿using Microsoft.EntityFrameworkCore.Migrations;
+﻿using System;
+using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
@@ -46,6 +47,28 @@ namespace TmsApi.Migrations
                 oldClrType: typeof(decimal),
                 oldType: "numeric");
 
+            migrationBuilder.AddColumn<bool>(
+                name: "IsDeleted",
+                table: "Students",
+                type: "boolean",
+                nullable: false,
+                defaultValue: false);
+
+            migrationBuilder.AddColumn<DateTime>(
+                name: "LastUpdated",
+                table: "Students",
+                type: "timestamp with time zone",
+                nullable: false,
+                defaultValue: new DateTime(1, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified));
+
+            migrationBuilder.AddColumn<uint>(
+                name: "xmin",
+                table: "Students",
+                type: "xid",
+                rowVersion: true,
+                nullable: false,
+                defaultValue: 0u);
+
             migrationBuilder.AlterColumn<decimal>(
                 name: "Grade",
                 table: "Enrollments",
@@ -56,6 +79,13 @@ namespace TmsApi.Migrations
                 oldClrType: typeof(decimal),
                 oldType: "numeric",
                 oldNullable: true);
+
+            migrationBuilder.AddColumn<bool>(
+                name: "IsArchived",
+                table: "Enrollments",
+                type: "boolean",
+                nullable: false,
+                defaultValue: false);
 
             migrationBuilder.AlterColumn<string>(
                 name: "Title",
@@ -112,6 +142,22 @@ namespace TmsApi.Migrations
             migrationBuilder.DropIndex(
                 name: "IX_Courses_Code",
                 table: "Courses");
+
+            migrationBuilder.DropColumn(
+                name: "IsDeleted",
+                table: "Students");
+
+            migrationBuilder.DropColumn(
+                name: "LastUpdated",
+                table: "Students");
+
+            migrationBuilder.DropColumn(
+                name: "xmin",
+                table: "Students");
+
+            migrationBuilder.DropColumn(
+                name: "IsArchived",
+                table: "Enrollments");
 
             migrationBuilder.AlterColumn<string>(
                 name: "RegistrationNumber",
