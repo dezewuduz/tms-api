@@ -38,7 +38,6 @@ public class TestController(TmsDbContext context) : ControllerBase
             return BadRequest(new { Message = ex.Message });
         }
     }
-
     [HttpGet("translation-fix-server")]
     public IActionResult TestServerSide()
     {
@@ -83,7 +82,7 @@ public class TestController(TmsDbContext context) : ControllerBase
         return Ok(report);
     }
 
-    // ✅ Exercise 8 — Shadow Property LastUpdated
+    // Exercise 8 — Shadow Property LastUpdated
     [HttpPut("students/{id}/name")]
     public async Task<IActionResult> UpdateStudentName(
         int id, [FromBody] string newName, CancellationToken ct)
@@ -97,7 +96,6 @@ public class TestController(TmsDbContext context) : ControllerBase
         await context.SaveChangesAsync(ct);
         return Ok(new { student.Id, student.Name, LastUpdated = DateTime.UtcNow });
     }
-
     //  Exercise 8 — Concurrency test
     [HttpPut("students/{id}/gpa")]
     public async Task<IActionResult> UpdateStudentGpa(
