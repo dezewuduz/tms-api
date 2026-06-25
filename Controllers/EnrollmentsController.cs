@@ -1,36 +1,58 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using TmsApi.Data;
+using TmsApi.Entities;
+
+namespace TmsApi.Controllers;
 
 [ApiController]
 [Route("api/enrollments")]
-public class EnrollmentsController(IEnrollmentService enrollmentService) : ControllerBase
+public class EnrollmentsController(TmsDbContext context) : ControllerBase
 {
     [HttpGet]
     public async Task<IActionResult> GetAll()
     {
-        var enrollments = await enrollmentService.GetAllAsync();
+        var enrollments = await context.Enrollments
+            .AsNoTracking()
+            .Include(e => e.Student)
+            .Include(e => e.Course)
+            .ToListAsync();
         return Ok(enrollments);
     }
 
     [HttpGet("{id}")]
-    public async Task<IActionResult> GetById(string id)
+    public async Task<IActionResult> GetById(int id)
     {
-        var record = await enrollmentService.GetByIdAsync(id);
-        return record is not null ? Ok(record) : NotFound();
+        var enrollment = await context.Enrollments
+            .Include(e => e.Student)
+            .Include(e => e.Course)
+            .FirstOrDefaultAsync(e => e.Id == id);
+        return enrollment is not null ? Ok(enrollment) : NotFound();
     }
 
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] CreateEnrollmentRequest request)
     {
-        var record = await enrollmentService.EnrollAsync(request.StudentId, request.CourseCode);
-        return CreatedAtAction(nameof(GetById), new { id = record.Id }, record);
+        var enrollment = new Enrollment
+        {
+            StudentId = request.StudentId,
+            CourseId = request.CourseId,
+            EnrolledAt = DateTime.UtcNow
+        };
+        context.Enrollments.Add(enrollment);
+        await context.SaveChangesAsync();
+        return CreatedAtAction(nameof(GetById), new { id = enrollment.Id }, enrollment);
     }
 
     [HttpDelete("{id}")]
-    public async Task<IActionResult> Delete(string id)
+    public async Task<IActionResult> Delete(int id)
     {
-        var deleted = await enrollmentService.DeleteAsync(id);
-        return deleted ? NoContent() : NotFound();
+        var enrollment = await context.Enrollments.FindAsync(id);
+        if (enrollment is null) return NotFound();
+        context.Enrollments.Remove(enrollment);
+        await context.SaveChangesAsync();
+        return NoContent();
     }
 }
-public record CreateEnrollmentRequest(string StudentId, string CourseCode);
-    
+
+public record CreateEnrollmentRequest(int StudentId, int CourseId);
