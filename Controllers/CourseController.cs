@@ -14,7 +14,7 @@ public class CoursesController(TmsDbContext context) : ControllerBase
     {
         var courses = await context.Courses
             .AsNoTracking()
-            .Select(c => new { c.Id, c.Title, c.Code, c.Capacity })
+            .Select(c => new { c.Id, c.Title, c.Code, c.MaxCapacity })
             .ToListAsync();
         return Ok(courses);
     }
@@ -29,12 +29,11 @@ public class CoursesController(TmsDbContext context) : ControllerBase
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] CreateCourseRequest request)
     {
-        var course = new Course { Title = request.Title, Code = request.Code, Capacity = request.Capacity };
+        var course = new Course { Title = request.Title, Code = request.Code, MaxCapacity = request.MaxCapacity };
         context.Courses.Add(course);
         await context.SaveChangesAsync();
         return CreatedAtAction(nameof(GetById), new { id = course.Id }, course);
     }
-
     [HttpDelete("{id}")]
     public async Task<IActionResult> Delete(int id)
     {
@@ -46,4 +45,4 @@ public class CoursesController(TmsDbContext context) : ControllerBase
     }
 }
 
-public record CreateCourseRequest(string Title, string Code, int Capacity);
+public record CreateCourseRequest(string Title, string Code, int MaxCapacity);
