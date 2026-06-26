@@ -14,8 +14,17 @@ public class EnrollmentsController(TmsDbContext context) : ControllerBase
     {
         var enrollments = await context.Enrollments
             .AsNoTracking()
-            .Include(e => e.Student)
-            .Include(e => e.Course)
+            .Select(e => new
+            {
+                e.Id,
+                e.StudentId,
+                e.CourseId,
+                e.Grade,
+                e.EnrolledAt,
+                e.IsArchived,
+                StudentName = e.Student.Name,
+                CourseTitle = e.Course.Title
+            })
             .ToListAsync();
         return Ok(enrollments);
     }
@@ -24,8 +33,18 @@ public class EnrollmentsController(TmsDbContext context) : ControllerBase
     public async Task<IActionResult> GetById(int id)
     {
         var enrollment = await context.Enrollments
-            .Include(e => e.Student)
-            .Include(e => e.Course)
+            .AsNoTracking()
+            .Select(e => new
+            {
+                e.Id,
+                e.StudentId,
+                e.CourseId,
+                e.Grade,
+                e.EnrolledAt,
+                e.IsArchived,
+                StudentName = e.Student.Name,
+                CourseTitle = e.Course.Title
+            })
             .FirstOrDefaultAsync(e => e.Id == id);
         return enrollment is not null ? Ok(enrollment) : NotFound();
     }

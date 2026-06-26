@@ -1,5 +1,4 @@
 namespace TmsApi.Entities;
-
 public class Course
 {
     public int Id { get; set; }
@@ -9,6 +8,6 @@ public class Course
 
     // Navigation properties
     public ICollection<Enrollment> Enrollments { get; set; } = new List<Enrollment>();
-    public ICollection<Assessment> Assessments { get; set; } = [];    //  added
-    public ICollection<Certificate> Certificates { get; set; } = [];  // added
+    public ICollection<Assessment> Assessments { get; set; } = new List<Assessment>();
+    public ICollection<Certificate> Certificates { get; set; } = [];
 }

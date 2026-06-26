@@ -35,7 +35,8 @@ public class ReportingController(TmsDbContext context) : ControllerBase
             .GroupBy(e => e.Course.Title)
             .Select(g => new { Course = g.Key, AverageGPA = g.Average(e => e.Student.GPA) })
             .ToListAsync();
-        return Ok(list);
+        var rounded = list.Select(x => new { x.Course, AverageGPA = Math.Round(x.AverageGPA, 2) });
+        return Ok(rounded);
     }
 
     [HttpGet("unenrolled-students-subquery")]
@@ -89,17 +90,58 @@ public class ReportingController(TmsDbContext context) : ControllerBase
             .ToListAsync(ct);
         return Ok(courses);
     }
+
+    // Exercise 7 Part A - Intentional N+1
+    [HttpGet("n1-demo")]
+    public async Task<IActionResult> N1Demo(CancellationToken ct)
+    {
+        Console.WriteLine("\n>>> Exercise 7 Part A - N+1 Demo...");
+        var students = await context.Students
+            .AsNoTracking()
+            .ToListAsync(ct);
+
+        var results = new List<object>();
+        foreach (var s in students)
+        {
+            // loop ውስጥ query — 1+N SQL statements!
+            var count = await context.Enrollments
+                .AsNoTracking()
+                .CountAsync(e => e.StudentId == s.Id, ct);
+            Console.WriteLine($"{s.Name}: {count} enrollments");
+            results.Add(new { s.Name, EnrollmentCount = count });
+        }
+        return Ok(results);
+    }
+
+    // Exercise 7 Part B - Fixed
+    [HttpGet("n1-fixed")]
+    public async Task<IActionResult> N1Fixed(CancellationToken ct)
+    {
+        Console.WriteLine("\n>>> Exercise 7 Part B - N+1 Fixed...");
+        var report = await context.Students
+            .AsNoTracking()
+            .Select(s => new
+            {
+                s.Name,
+                EnrollmentCount = s.Enrollments.Count
+            })
+            .ToListAsync(ct);
+
+        foreach (var r in report)
+            Console.WriteLine($"{r.Name}: {r.EnrollmentCount} enrollments");
+
+        return Ok(report);
+    }
+
     // Exercise 9 — Bulk Archive
     [HttpPost("archive-old-enrollments")]
     public async Task<IActionResult> ArchiveOldEnrollments(CancellationToken ct)
     {
         var cutoff = DateTime.UtcNow.AddDays(-1);
         Console.WriteLine($"\n>>> Bulk archive enrollments before {cutoff}...");
-
         var count = await context.Enrollments
             .Where(e => e.EnrolledAt < cutoff)
             .ExecuteUpdateAsync(s => s.SetProperty(e => e.IsArchived, true), ct);
-
         return Ok(new { ArchivedCount = count });
     }
 
@@ -107,29 +149,29 @@ public class ReportingController(TmsDbContext context) : ControllerBase
     [HttpDelete("students/{id}")]
     public async Task<IActionResult> SoftDeleteStudent(int id, CancellationToken ct)
     {
-        var student = await context.Students.FindAsync([id], ct);
+        var student = await context.Students
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(s => s.Id == id, ct);
         if (student is null) return NotFound();
-
         student.IsDeleted = true;
         context.Entry(student).Property("LastUpdated").CurrentValue = DateTime.UtcNow;
         await context.SaveChangesAsync(ct);
-
-        return Ok(new { Message = $"Student {id} soft deleted " });
+        return Ok(new { Message = $"Student {id} soft deleted" });
     }
 
-    // Exercise 9 — Normal query (IsDeleted hidden)
+    // Exercise 9 — Normal query
     [HttpGet("students/active")]
     public async Task<IActionResult> GetActiveStudents(CancellationToken ct)
     {
         Console.WriteLine("\n>>> Normal query — IsDeleted students hidden...");
         var students = await context.Students
             .AsNoTracking()
-            .Select(s => new { s.Id, s.Name, s.IsDeleted })
+            .Select(s => new { s.Id, s.Name })
             .ToListAsync(ct);
         return Ok(students);
     }
 
-    // Exercise 9 — Admin (IgnoreQueryFilters)
+    // Exercise 9 — Admin
     [HttpGet("students/all-including-deleted")]
     public async Task<IActionResult> GetAllStudentsAdmin(CancellationToken ct)
     {
