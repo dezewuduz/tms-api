@@ -30,8 +30,10 @@ app.MapGet("/api/assessments/results", () => Results.Ok(new
 app.Run();*/
 using Microsoft.EntityFrameworkCore;
 using TmsApi.Data;
-using TmsApi.Entities; 
+using TmsApi.Entities;
+using TmsApi.Services; 
 using Scalar.AspNetCore;
+
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -50,9 +52,10 @@ builder.Services.AddDbContext<TmsDbContext>(options =>
            .EnableSensitiveDataLogging());
 
 // 2. DI Registration
-builder.Services.AddSingleton<EnrollmentWorker>();
-builder.Services.AddSingleton<IEnrollmentService, EnrollmentService>();
-
+//builder.Services.AddSingleton<EnrollmentWorker>();
+//builder.Services.AddSingleton<IEnrollmentService, EnrollmentService>();
+builder.Services.AddScoped<ICourseService, CourseService>();
+builder.Services.AddScoped<IEnrollmentService, EnrollmentService>();
 // 3. Options Registration (Exercise 3)
 builder.Services.AddOptions<PaymentOptions>()
     .Bind(builder.Configuration.GetSection("Payments"))
