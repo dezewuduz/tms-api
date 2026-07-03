@@ -35,7 +35,19 @@ public class EnrollmentsController(
             });
 
         // Step 3: Enroll → 201
-        var enrollment = await enrollmentService.CreateAsync(courseId, request, ct);
-        return CreatedAtAction(nameof(GetEnrollment), new { courseId, id = enrollment.Id }, enrollment);
+        try
+        {
+            var enrollment = await enrollmentService.CreateAsync(courseId, request, ct);
+            return CreatedAtAction(nameof(GetEnrollment), new { courseId, id = enrollment.Id }, enrollment);
+        }
+        catch (DuplicateEnrollmentException ex)
+        {
+            return Conflict(new ProblemDetails
+            {
+                Title = "Student already enrolled",
+                Detail = ex.Message,
+                Status = StatusCodes.Status409Conflict
+            });
+        }
     }
 }

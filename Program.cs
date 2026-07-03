@@ -11,7 +11,7 @@ builder.Services.AddControllers();
 
 var app = builder.Build();
 
-// 1. መጀመሪያ ይህንን Middleware ጨምር (ለሎግ እና ለCorrelation ID)
+// 1. Middleware ጨምር (ለሎግ እና ለCorrelation ID)
 app.UseMiddleware<RequestLoggingMiddleware>();
 
 // 2. --------
