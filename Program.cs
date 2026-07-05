@@ -33,7 +33,7 @@ using TmsApi.Data;
 using TmsApi.Entities;
 using TmsApi.Services; 
 using Scalar.AspNetCore;
-
+using TmsApi.Filters;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -41,7 +41,10 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddAuthentication("Training")
     .AddScheme<Microsoft.AspNetCore.Authentication.AuthenticationSchemeOptions, TrainingAuthHandler>("Training", null);
 builder.Services.AddAuthorization();
-builder.Services.AddControllers();
+builder.Services.AddControllers(options =>
+{
+    options.Filters.Add<AuditLogFilter>();
+});
 builder.Services.AddProblemDetails();
 builder.Services.AddOpenApi();
 
@@ -118,7 +121,7 @@ using (var scope = app.Services.CreateScope())
         };
         context.Students.AddRange(students);
 
-        var courses = new List<Course>
+       /* var courses = new List<Course>
         {
             new() { Code = "CS-101", Title = "Introduction to Computer Science", MaxCapacity = 30 },
             new() { Code = "CS-201", Title = "Data Structures and Algorithms", MaxCapacity = 25 },
@@ -135,8 +138,14 @@ using (var scope = app.Services.CreateScope())
             new() { StudentId = students[3].Id, CourseId = courses[1].Id, Grade = 3.9m }
         };
         context.Enrollments.AddRange(enrollments);
-        context.SaveChanges();
+        context.SaveChanges();*/
     }
 }
-
+// 8. M6 Session 2: Seed 25 courses (Development only, idempotent)
+if (app.Environment.IsDevelopment())// Only seed in development environment
+{
+using var scope = app.Services.CreateScope();
+var context = scope.ServiceProvider.GetRequiredService<TmsDbContext>();
+await DataSeeder.SeedAsync(context);
+}
 app.Run();

@@ -62,6 +62,12 @@ public class CoursesController(ICourseService courseService) : ControllerBase
         var course = await courseService.GetByIdAsync(id, ct);
         return course is not null ? Ok(course) : NotFound();
     }
+    [HttpGet]
+public async Task<IActionResult> GetCourses([FromQuery] PagedRequest request, CancellationToken ct)
+{
+    var result = await courseService.GetCoursesAsync(request, ct);
+    return Ok(result);
+}
 
     [HttpPost]
     public async Task<IActionResult> CreateCourse([FromBody] CreateCourseRequest request, CancellationToken ct)
