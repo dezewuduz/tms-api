@@ -2,9 +2,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using TmsApi.Dtos;
 using TmsApi.Services;
-
 namespace TmsApi.Controllers;
-
 [ApiController]
 [Route("api/courses/{courseId:int}/enrollments")]
 [Tags("Enrollments")]
@@ -23,7 +21,6 @@ public class EnrollmentsController(ICourseService courseService, IEnrollmentServ
         var enrollments = await enrollmentService.GetByCourseAsync(courseId, ct);
         return Ok(enrollments);
     }
-
     [HttpGet("{id:int}", Name = nameof(GetEnrollment))]
     [ProducesResponseType(typeof(EnrollmentResponseDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
@@ -33,7 +30,6 @@ public class EnrollmentsController(ICourseService courseService, IEnrollmentServ
         var enrollment = await enrollmentService.GetByIdAsync(courseId, id, ct);
         return enrollment is not null ? Ok(enrollment) : NotFound();
     }
-
     [HttpPost]
     [ProducesResponseType(typeof(EnrollmentResponseDto), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
@@ -47,7 +43,6 @@ public class EnrollmentsController(ICourseService courseService, IEnrollmentServ
         var course = await courseService.GetByIdAsync(courseId, ct);
         if (course is null)
             return NotFound();
-
         // Step 2: Course fully enrolled? → 409
         if (course.EnrollmentCount >= course.MaxCapacity)
             return Conflict(new ProblemDetails

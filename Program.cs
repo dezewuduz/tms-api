@@ -1,40 +1,11 @@
-/*var builder = WebApplication.CreateBuilder(args);
-
-// Services
-builder.Services
-    .AddAuthentication("Training")
-    .AddScheme<Microsoft.AspNetCore.Authentication.AuthenticationSchemeOptions,
-        TrainingAuthHandler>("Training", null);
-
-builder.Services.AddAuthorization();
-builder.Services.AddControllers();
-
-var app = builder.Build();
-
-// 1. Middleware ጨምር (ለሎግ እና ለCorrelation ID)
-app.UseMiddleware<RequestLoggingMiddleware>();
-
-// 2. --------
-app.UseRouting();
-app.UseAuthentication();
-app.UseAuthorization();
-
-// Protected endpoint
-app.MapGet("/api/assessments/results", () => Results.Ok(new
-{
-    courseCode = "CS-101",
-    studentId = "S-001",
-    letterGrade = "A"
-})).RequireAuthorization();
-
-app.Run();*/
 using Microsoft.EntityFrameworkCore;
 using TmsApi.Data;
 using TmsApi.Entities;
-using TmsApi.Services; 
+using TmsApi.Services;
+using TmsApi.Middleware; 
 using Scalar.AspNetCore;
 using TmsApi.Filters;
-
+using Asp.Versioning;
 var builder = WebApplication.CreateBuilder(args);
 
 // 1. Services
@@ -45,9 +16,31 @@ builder.Services.AddControllers(options =>
 {
     options.Filters.Add<AuditLogFilter>();
 });
-builder.Services.AddProblemDetails();
-builder.Services.AddOpenApi();
-
+builder.Services.AddProblemDetails();//new line added for ProblemDetails support
+builder.Services.AddOpenApi("v1", options =>
+{
+    options.ShouldInclude = description =>
+        description.GroupName == "v1";
+});
+builder.Services.AddOpenApi("v2", options =>
+{
+    options.ShouldInclude = description =>
+        description.GroupName == "v2";
+});
+builder.Services.AddApiVersioning(options =>
+{
+    options.DefaultApiVersion = new ApiVersion(1, 0);
+    options.AssumeDefaultVersionWhenUnspecified = true;
+    options.ReportApiVersions = true;
+    options.ApiVersionReader = ApiVersionReader.Combine(
+        new UrlSegmentApiVersionReader(),
+        new HeaderApiVersionReader("X-Api-Version"));
+})
+.AddApiExplorer(options =>
+{
+    options.GroupNameFormat = "'v'VVV";
+    options.SubstituteApiVersionInUrl = true;
+});
 // Register TmsDbContext scoped for incoming HTTP requests
 builder.Services.AddDbContext<TmsDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("TmsDatabase"))
@@ -55,8 +48,6 @@ builder.Services.AddDbContext<TmsDbContext>(options =>
            .EnableSensitiveDataLogging());
 
 // 2. DI Registration
-//builder.Services.AddSingleton<EnrollmentWorker>();
-//builder.Services.AddSingleton<IEnrollmentService, EnrollmentService>();
 builder.Services.AddScoped<ICourseService, CourseService>();
 builder.Services.AddScoped<IEnrollmentService, EnrollmentService>();
 // 3. Options Registration (Exercise 3)
@@ -71,9 +62,7 @@ builder.Host.UseDefaultServiceProvider(options =>
     options.ValidateScopes = true;
     options.ValidateOnBuild = true;
 });
-
 var app = builder.Build();
-
 // 5. Middleware Pipeline
 app.UseMiddleware<RequestLoggingMiddleware>();
 app.UseExceptionHandler();
@@ -81,15 +70,22 @@ app.UseStatusCodePages();
 app.UseRouting();
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseMiddleware<V1DeprecationMiddleware>();
 app.MapControllers();
-
 // 7. Environment-aware configuration
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
-    app.MapScalarApiReference();
+    app.MapScalarApiReference(options =>
+{
+    options.WithTitle("TMS API Reference")
+           .WithTheme(ScalarTheme.DeepSpace)
+           .WithDefaultHttpClient(ScalarTarget.CSharp, ScalarClient.HttpClient);
+    options
+        .AddDocument("v1", "API Version 1.0")
+        .AddDocument("v2", "API Version 2.0");
+});
 }
-
 // 6. Endpoints
 app.MapGet("/api/assessments/results", () => Results.Ok(new
 {
@@ -121,24 +117,6 @@ using (var scope = app.Services.CreateScope())
         };
         context.Students.AddRange(students);
 
-       /* var courses = new List<Course>
-        {
-            new() { Code = "CS-101", Title = "Introduction to Computer Science", MaxCapacity = 30 },
-            new() { Code = "CS-201", Title = "Data Structures and Algorithms", MaxCapacity = 25 },
-            new() { Code = "MAT-101", Title = "Calculus I", MaxCapacity= 40 }
-        };
-        context.Courses.AddRange(courses);
-        context.SaveChanges();
-
-        var enrollments = new List<Enrollment>
-        {
-            new() { StudentId = students[0].Id, CourseId = courses[0].Id, Grade = 4.0m },
-            new() { StudentId = students[0].Id, CourseId = courses[1].Id, Grade = 3.6m },
-            new() { StudentId = students[1].Id, CourseId = courses[0].Id, Grade = 2.8m },
-            new() { StudentId = students[3].Id, CourseId = courses[1].Id, Grade = 3.9m }
-        };
-        context.Enrollments.AddRange(enrollments);
-        context.SaveChanges();*/
     }
 }
 // 8. M6 Session 2: Seed 25 courses (Development only, idempotent)
