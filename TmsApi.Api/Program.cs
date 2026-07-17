@@ -7,6 +7,11 @@ using TmsApi.Api.Middleware;
 using Scalar.AspNetCore;
 using TmsApi.Api.Filters;
 using Asp.Versioning;
+using MediatR;
+using FluentValidation;
+using TmsApi.Application.Behaviors;
+using TmsApi.Application.Enrollments.Commands;
+using TmsApi.Api.ExceptionHandlers;
 var builder = WebApplication.CreateBuilder(args);
 
 // 1. Services
@@ -17,7 +22,18 @@ builder.Services.AddControllers(options =>
 {
     options.Filters.Add<AuditLogFilter>();
 });
-builder.Services.AddProblemDetails();//new line added for ProblemDetails support
+builder.Services.AddProblemDetails();
+
+// Session 1 Exercise 2: MediatR + Validation pipeline
+builder.Services.AddMediatR(cfg =>
+    cfg.RegisterServicesFromAssembly(typeof(EnrollStudentHandler).Assembly));
+builder.Services.AddValidatorsFromAssembly(typeof(EnrollStudentValidator).Assembly);
+
+// LoggingBehavior FIRST it must wrap ValidationBehavior
+builder.Services.AddTransient(typeof(IPipelineBehavior<,>), typeof(LoggingBehavior<,>));
+builder.Services.AddTransient(typeof(IPipelineBehavior<,>), typeof(ValidationBehavior<,>));
+
+builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 builder.Services.AddOpenApi("v1", options =>
 {
     options.ShouldInclude = description =>
@@ -121,7 +137,7 @@ using (var scope = app.Services.CreateScope())
     }
 }
 // 8. M6 Session 2: Seed 25 courses (Development only, idempotent)
-if (app.Environment.IsDevelopment())// Only seed in development environment
+if (app.Environment.IsDevelopment())
 {
 using var scope = app.Services.CreateScope();
 var context = scope.ServiceProvider.GetRequiredService<TmsDbContext>();

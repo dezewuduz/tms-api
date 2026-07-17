@@ -1,4 +1,4 @@
-namespace TmsApi.Common;
+namespace TmsApi.Application.Common;
 
 public sealed record EnrollmentError(string Code, string Message)
 {

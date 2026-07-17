@@ -1,8 +1,8 @@
 using MediatR;
-using TmsApi.Common;
-using TmsApi.Services;
-using TmsApi.Entities;
-namespace TmsApi.Enrollments.Commands;
+using TmsApi.Application.Common;
+using TmsApi.Application.Interfaces;
+using TmsApi.Domain.Entities;
+namespace TmsApi.Application.Enrollments.Commands;
 public class EnrollStudentHandler(
     IEnrollmentService enrollmentService,
     ICourseService courseService)

@@ -1,4 +1,4 @@
-namespace TmsApi.Common;
+namespace TmsApi.Application.Common;
 
 public readonly record struct Result<TValue, TError>
 {

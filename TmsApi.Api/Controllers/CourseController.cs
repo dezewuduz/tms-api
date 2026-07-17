@@ -4,7 +4,6 @@ using Microsoft.AspNetCore.Routing;
 using TmsApi.Application.DTOs;
 using TmsApi.Infrastructure.Services;
 using TmsApi.Application.Interfaces;
-
 namespace TmsApi.Api.Controllers;
 
 [ApiController]
@@ -55,7 +54,6 @@ public class CoursesController(ICourseService courseService, LinkGenerator linkG
 
         return Ok(detailDto);
     }
-
     [HttpGet]
     [ProducesResponseType(typeof(PagedResponse<CourseResponseDto>), StatusCodes.Status200OK)]
     [EndpointSummary("List courses with pagination")]
@@ -65,7 +63,6 @@ public class CoursesController(ICourseService courseService, LinkGenerator linkG
         var result = await courseService.GetCoursesAsync(request, ct);
         return Ok(result);
     }
-
     [HttpPost]
     [ProducesResponseType(typeof(CourseResponseDto), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
