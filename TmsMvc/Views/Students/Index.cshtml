@@ -1,0 +1,59 @@
+@model List<TmsMvc.Models.Student>
+
+<h2>Students</h2>
+<p>
+    <a asp-action="Create" class="btn btn-primary">
+        Add Student
+    </a>
+</p>
+
+<table class="table table-bordered">
+
+    <thead>
+        <tr>
+            <th>Id</th>
+            <th>Registration No</th>
+            <th>Name</th>
+            <th>GPA</th>
+            <th>Status</th>
+            <th>Actions</th>
+
+        </tr>
+    </thead>
+
+    <tbody>
+
+    @foreach(var student in Model)
+    {
+        <tr>
+            <td>@student.Id</td>
+            <td>@student.RegistrationNumber</td>
+            <td>@student.Name</td>
+            <td>@student.GPA</td>
+            <td>@student.IsActive</td>
+            <td>
+                <a asp-action="Details"
+                 asp-route-id="@student.Id"
+                 class="btn btn-sm btn-info">
+                  Details
+                 </a>
+
+               <a asp-action="Edit"
+                 asp-route-id="@student.Id"
+                class="btn btn-sm btn-warning">
+                 Edit
+                </a>
+
+               <a asp-action="Delete"
+                asp-route-id="@student.Id"
+                class="btn btn-sm btn-danger">
+                 Delete
+                 </a>
+
+            </td>
+        </tr>
+    }
+
+    </tbody>
+
+</table>

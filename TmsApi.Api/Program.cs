@@ -17,6 +17,12 @@ using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.RateLimiting;
 using TmsApi.Api.RateLimiting;
 using Microsoft.AspNetCore.Mvc;
+using System.Threading.Channels;
+using TmsApi.Application.Transcripts;
+using TmsApi.Infrastructure.Transcripts;
+using TmsApi.Api.Workers;
+using TmsApi.Application.Hubs;
+using TmsApi.Api.Hubs;
 var builder = WebApplication.CreateBuilder(args);
 
 // 1. Services
@@ -39,6 +45,13 @@ builder.Services.AddTransient(typeof(IPipelineBehavior<,>), typeof(LoggingBehavi
 builder.Services.AddTransient(typeof(IPipelineBehavior<,>), typeof(ValidationBehavior<,>));
 
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
+
+// Session 3: Transcript status store, channel, worker, SignalR
+builder.Services.AddSingleton<ITranscriptStatusStore, InMemoryTranscriptStatusStore>();
+builder.Services.AddSingleton(Channel.CreateBounded<TranscriptRequest>(
+    new BoundedChannelOptions(100) { FullMode = BoundedChannelFullMode.Wait }));
+builder.Services.AddHostedService<TranscriptWorker>();
+builder.Services.AddSignalR();
 builder.Services.AddOpenApi("v1", options =>
 {
     options.ShouldInclude = description =>
@@ -178,6 +191,7 @@ app.UseAuthorization();
 app.UseMiddleware<V1DeprecationMiddleware>();
 app.UseRateLimiter();
 app.MapControllers();
+app.MapHub<TmsHub>("/hubs/tms");
 // 7. Environment-aware configuration
 if (app.Environment.IsDevelopment())
 {
