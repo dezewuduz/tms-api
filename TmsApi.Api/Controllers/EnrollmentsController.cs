@@ -32,4 +32,18 @@ public class EnrollmentsController(ICourseService courseService, IEnrollmentServ
         var enrollment = await enrollmentService.GetByIdAsync(courseId, id, ct);
         return enrollment is not null ? Ok(enrollment) : NotFound();
     }
+    [HttpPost(Name = nameof(CreateEnrollment))]
+[ProducesResponseType(typeof(EnrollmentResponseDto), StatusCodes.Status201Created)]
+[ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+[ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+[EndpointSummary("Enroll a student in a course")]
+public async Task<IActionResult> CreateEnrollment(int courseId, EnrollStudentRequest request, CancellationToken ct)
+{
+    var course = await courseService.GetByIdAsync(courseId, ct);
+    if (course is null) return NotFound();
+
+    var enrollment = await enrollmentService.CreateAsync(courseId, request, ct);
+
+    return CreatedAtRoute(nameof(GetEnrollment), new { courseId, id = enrollment.Id }, enrollment);
+}
 }

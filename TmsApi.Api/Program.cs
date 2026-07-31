@@ -20,9 +20,8 @@ using Microsoft.AspNetCore.Mvc;
 using System.Threading.Channels;
 using TmsApi.Application.Transcripts;
 using TmsApi.Infrastructure.Transcripts;
-using TmsApi.Api.Workers;
+using TmsApi.Infrastructure.Workers;
 using TmsApi.Application.Hubs;
-using TmsApi.Api.Hubs;
 var builder = WebApplication.CreateBuilder(args);
 
 // 1. Services
@@ -34,6 +33,14 @@ builder.Services.AddControllers(options =>
     options.Filters.Add<AuditLogFilter>();
 });
 builder.Services.AddProblemDetails();
+// CORS: allow the Angular dev server to call this API
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowAngular", policy =>
+        policy.WithOrigins("http://localhost:4200")
+              .AllowAnyHeader()
+              .AllowAnyMethod());
+});
 
 // Session 1 Exercise 2: MediatR + Validation pipeline
 builder.Services.AddMediatR(cfg =>
@@ -186,6 +193,7 @@ app.UseMiddleware<RequestLoggingMiddleware>();
 app.UseExceptionHandler();
 app.UseStatusCodePages();
 app.UseRouting();
+app.UseCors("AllowAngular");
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseMiddleware<V1DeprecationMiddleware>();
