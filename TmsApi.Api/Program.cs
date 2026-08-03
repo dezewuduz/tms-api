@@ -233,8 +233,18 @@ using (var scope = app.Services.CreateScope())
     var context = scope.ServiceProvider.GetRequiredService<TmsDbContext>();
     context.Database.Migrate();
 
-    if (!context.Students.Any())
+    // ONE-TIME FIX: Set empty Status values to "Pending" (from AddEnrollmentStatus migration default)
+    var emptyStatusEnrollments = context.Enrollments.Where(e => e.Status == "").ToList();
+    if (emptyStatusEnrollments.Any())
     {
+        foreach (var enrollment in emptyStatusEnrollments)
+        {
+            enrollment.Status = "Pending";
+        }
+        context.SaveChanges();
+    }
+
+    if (!context.Students.Any()){
         var students = new List<Student>
         {
             new() { RegistrationNumber = "TMS-2026-0001", Name = "Alice Smith", GPA = 3.8m, IsActive = true },
