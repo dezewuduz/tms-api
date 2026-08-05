@@ -3,7 +3,9 @@ using Microsoft.AspNetCore.Mvc;
 using TmsApi.Application.DTOs;
 using TmsApi.Infrastructure.Services;
 using TmsApi.Application.Interfaces;
+
 namespace TmsApi.Api.Controllers;
+
 [ApiController]
 [Route("api/courses/{courseId:int}/enrollments")]
 [Tags("Enrollments")]
@@ -32,18 +34,40 @@ public class EnrollmentsController(ICourseService courseService, IEnrollmentServ
         var enrollment = await enrollmentService.GetByIdAsync(courseId, id, ct);
         return enrollment is not null ? Ok(enrollment) : NotFound();
     }
+
     [HttpPost(Name = nameof(CreateEnrollment))]
-[ProducesResponseType(typeof(EnrollmentResponseDto), StatusCodes.Status201Created)]
-[ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
-[ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
-[EndpointSummary("Enroll a student in a course")]
-public async Task<IActionResult> CreateEnrollment(int courseId, EnrollStudentRequest request, CancellationToken ct)
-{
-    var course = await courseService.GetByIdAsync(courseId, ct);
-    if (course is null) return NotFound();
+    [ProducesResponseType(typeof(EnrollmentResponseDto), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [EndpointSummary("Enroll a student in a course")]
+    public async Task<IActionResult> CreateEnrollment(int courseId, EnrollStudentRequest request, CancellationToken ct)
+    {
+        var course = await courseService.GetByIdAsync(courseId, ct);
+        if (course is null) return NotFound();
 
-    var enrollment = await enrollmentService.CreateAsync(courseId, request, ct);
+        var enrollment = await enrollmentService.CreateAsync(courseId, request, ct);
 
-    return CreatedAtRoute(nameof(GetEnrollment), new { courseId, id = enrollment.Id }, enrollment);
-}
+        return CreatedAtRoute(nameof(GetEnrollment), new { courseId, id = enrollment.Id }, enrollment);
+    }
+
+    // GET /api/enrollments — flat list of all enrollments across all courses (absolute route, bypasses class-level route)
+    [HttpGet("/api/enrollments")]
+    [ProducesResponseType(typeof(IReadOnlyList<EnrollmentResponseDto>), StatusCodes.Status200OK)]
+    [EndpointSummary("List all enrollments across all courses")]
+    public async Task<IActionResult> GetAllEnrollments(CancellationToken ct)
+    {
+        var enrollments = await enrollmentService.GetAllAsync(ct);
+        return Ok(enrollments);
+    }
+
+    // POST /api/enrollments/{id}/approve — approve a pending enrollment (absolute route)
+    [HttpPost("/api/enrollments/{id:int}/approve")]
+    [ProducesResponseType(typeof(EnrollmentResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [EndpointSummary("Approve a pending enrollment")]
+    public async Task<IActionResult> ApproveEnrollment(int id, CancellationToken ct)
+    {
+        var enrollment = await enrollmentService.ApproveAsync(id, ct);
+        return enrollment is not null ? Ok(enrollment) : NotFound();
+    }
 }

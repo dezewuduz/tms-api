@@ -13,13 +13,14 @@ public class EnrollmentService(TmsDbContext context, ILogger<EnrollmentService> 
         context.Enrollments
             .AsNoTracking()
             .Where(e => e.Id == id && e.CourseId == courseId)
-            .Select(e => new EnrollmentResponseDto(e.Id, e.CourseId, e.StudentId, e.EnrolledAt))
+            .Select(e => new EnrollmentResponseDto(e.Id, e.CourseId, e.StudentId, e.EnrolledAt, e.Status, e.Student.Name, e.Course.Title))
             .FirstOrDefaultAsync(ct);
+
     public Task<List<EnrollmentResponseDto>> GetByCourseAsync(int courseId, CancellationToken ct) =>
         context.Enrollments
             .AsNoTracking()
             .Where(e => e.CourseId == courseId)
-            .Select(e => new EnrollmentResponseDto(e.Id, e.CourseId, e.StudentId, e.EnrolledAt))
+            .Select(e => new EnrollmentResponseDto(e.Id, e.CourseId, e.StudentId, e.EnrolledAt, e.Status, e.Student.Name, e.Course.Title))
             .ToListAsync(ct);
 
     public async Task<EnrollmentResponseDto> CreateAsync(int courseId, EnrollStudentRequest request, CancellationToken ct)
@@ -58,7 +59,8 @@ public class EnrollmentService(TmsDbContext context, ILogger<EnrollmentService> 
 
     private static bool IsUniqueConstraintViolation(DbUpdateException ex) =>
         ex.InnerException is Npgsql.PostgresException { SqlState: "23505" };
-         // NEW - Exercise 2
+
+    // NEW - Exercise 2
     public async Task<bool> ExistsAsync(int studentId, string courseCode, CancellationToken ct) =>
         await context.Enrollments
             .AsNoTracking()
@@ -70,10 +72,34 @@ public class EnrollmentService(TmsDbContext context, ILogger<EnrollmentService> 
         await context.SaveChangesAsync(ct);
         return enrollment;
     }
+
     public async Task<List<Enrollment>> GetByStudentIdAsync(int studentId, CancellationToken ct) =>
         await context.Enrollments
             .AsNoTracking()
             .Include(e => e.Course)
             .Where(e => e.StudentId == studentId)
             .ToListAsync(ct);
+
+    // NEW - M9 Session 2: flat list of all enrollments across all courses
+    public Task<List<EnrollmentResponseDto>> GetAllAsync(CancellationToken ct) =>
+        context.Enrollments
+            .AsNoTracking()
+            .Select(e => new EnrollmentResponseDto(e.Id, e.CourseId, e.StudentId, e.EnrolledAt, e.Status, e.Student.Name, e.Course.Title))
+            .ToListAsync(ct);
+
+    // NEW - M9 Session 2: approve a pending enrollment
+    public async Task<EnrollmentResponseDto?> ApproveAsync(int id, CancellationToken ct)
+    {
+        var enrollment = await context.Enrollments.FirstOrDefaultAsync(e => e.Id == id, ct);
+        if (enrollment is null) return null;
+
+        enrollment.Status = "Approved";
+        await context.SaveChangesAsync(ct);
+
+        return await context.Enrollments
+            .AsNoTracking()
+            .Where(e => e.Id == id)
+            .Select(e => new EnrollmentResponseDto(e.Id, e.CourseId, e.StudentId, e.EnrolledAt, e.Status, e.Student.Name, e.Course.Title))
+            .FirstOrDefaultAsync(ct);
+    }
 }

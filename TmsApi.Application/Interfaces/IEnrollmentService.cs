@@ -12,4 +12,7 @@ public interface IEnrollmentService
     Task<bool> ExistsAsync(int studentId, string courseCode, CancellationToken ct);
     Task<Enrollment> AddAsync(Enrollment enrollment, CancellationToken ct);
     Task<List<Enrollment>> GetByStudentIdAsync(int studentId, CancellationToken ct);
+    // NEW - M9 Session 2
+    Task<List<EnrollmentResponseDto>> GetAllAsync(CancellationToken ct);
+    Task<EnrollmentResponseDto?> ApproveAsync(int id, CancellationToken ct);
 }
