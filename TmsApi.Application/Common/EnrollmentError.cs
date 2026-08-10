@@ -10,4 +10,7 @@ public sealed record EnrollmentError(string Code, string Message)
 
     public static EnrollmentError AlreadyEnrolled(int studentId, string code) =>
         new("already_enrolled", $"Student {studentId} is already enrolled in {code}.");
+
+    public static EnrollmentError NotFound(int id) =>
+        new("enrollment_not_found", $"Enrollment {id} was not found.");
 }

@@ -1,15 +1,19 @@
-﻿using Asp.Versioning;
+using Asp.Versioning;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.SignalR;
 using TmsApi.Application.Enrollments.Commands;
 using TmsApi.Application.Enrollments.Queries;
+using TmsApi.Application.Hubs;
 
 namespace TmsApi.Api.Controllers.V2;
 
 [ApiController]
 [Route("api/v{version:apiVersion}/enrollments")]
 [ApiVersion("2.0")]
-public class EnrollmentsController(IMediator mediator) : ControllerBase
+public class EnrollmentsController(
+    IMediator mediator,
+    IHubContext<TmsHub, ITmsHubClient> hubContext) : ControllerBase
 {
     [HttpPost]
     public async Task<IActionResult> Enroll(
@@ -46,5 +50,24 @@ public class EnrollmentsController(IMediator mediator) : ControllerBase
         var schedule = await mediator.Send(
             new GetStudentScheduleQuery(studentId), ct);
         return Ok(schedule);
+    }
+
+    [HttpPost("{id}/approve")]
+    public async Task<IActionResult> Approve(int id, CancellationToken ct)
+    {
+        var result = await mediator.Send(new ApproveEnrollmentCommand(id), ct);
+
+        return await result.Match<Task<IActionResult>>(
+            onSuccess: async approved =>
+            {
+                await hubContext.Clients.All
+                    .ReceiveEnrollmentStatusUpdated(id.ToString(), "Approved");
+                return NoContent();
+            },
+            onFailure: error => Task.FromResult<IActionResult>(Problem(
+                statusCode: StatusCodes.Status404NotFound,
+                title: "Approval failed",
+                detail: error.Message,
+                type: $"https://tms.local/errors/{error.Code}")));
     }
 }
