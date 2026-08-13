@@ -2,9 +2,11 @@ using Asp.Versioning;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
+using Microsoft.EntityFrameworkCore;
 using TmsApi.Application.Enrollments.Commands;
 using TmsApi.Application.Enrollments.Queries;
 using TmsApi.Application.Hubs;
+using TmsApi.Infrastructure.Persistence; // adjust if your DbContext namespace differs
 
 namespace TmsApi.Api.Controllers.V2;
 
@@ -13,8 +15,30 @@ namespace TmsApi.Api.Controllers.V2;
 [ApiVersion("2.0")]
 public class EnrollmentsController(
     IMediator mediator,
-    IHubContext<TmsHub, ITmsHubClient> hubContext) : ControllerBase
+    IHubContext<TmsHub, ITmsHubClient> hubContext,
+    TmsDbContext db) : ControllerBase
 {
+    [HttpGet]
+    public async Task<IActionResult> GetAll(CancellationToken ct)
+    {
+        var enrollments = await db.Enrollments
+            .Include(e => e.Student)
+            .Include(e => e.Course)
+            .Select(e => new
+            {
+                id = e.Id.ToString(),
+                studentId = e.StudentId,
+                studentName = e.Student!.Name,
+                courseId = e.CourseId,
+                courseName = e.Course!.Title,   // adjust to .Name if that's the property
+                status = e.Status,
+                enrolledAt = e.EnrolledAt
+            })
+            .ToListAsync(ct);
+
+        return Ok(enrollments);
+    }
+
     [HttpPost]
     public async Task<IActionResult> Enroll(
         EnrollStudentCommand command, CancellationToken ct)
