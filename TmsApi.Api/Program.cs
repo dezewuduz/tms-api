@@ -14,6 +14,7 @@ using TmsApi.Application.Behaviors;
 using TmsApi.Application.Enrollments.Commands;
 using TmsApi.Api.ExceptionHandlers;
 using System.Threading.RateLimiting;
+using Microsoft.AspNetCore.Antiforgery;   // ← add this line
 using Microsoft.AspNetCore.RateLimiting;
 using TmsApi.Api.RateLimiting;
 using Microsoft.AspNetCore.Mvc;
@@ -33,13 +34,26 @@ builder.Services.AddControllers(options =>
     options.Filters.Add<AuditLogFilter>();
 });
 builder.Services.AddProblemDetails();
-// CORS: allow the Angular dev server to call this API
+// CORS: named policy, origins driven by configuration
+var allowedOrigins = builder.Configuration
+    .GetSection("AllowedOrigins").Get<string[]>()
+    ?? ["http://localhost:4200"];
+
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("AllowAngular", policy =>
-        policy.WithOrigins("http://localhost:4200")
+    options.AddPolicy("TmsClient", policy =>
+    {
+        policy.WithOrigins(allowedOrigins)
               .AllowAnyHeader()
-              .AllowAnyMethod());
+              .AllowAnyMethod()
+              .AllowCredentials() // needed later for HttpOnly auth cookies (Session 2)
+              .SetPreflightMaxAge(TimeSpan.FromMinutes(10));
+    });
+});
+//Session 2: Antiforgery for XSRF double-submit protection
+builder.Services.AddAntiforgery(options =>
+{
+    options.HeaderName = "X-XSRF-TOKEN";
 });
 
 // Session 1 Exercise 2: MediatR + Validation pipeline
@@ -193,14 +207,30 @@ app.UseMiddleware<RequestLoggingMiddleware>();
 app.UseExceptionHandler();
 app.UseStatusCodePages();
 app.UseRouting();
-app.UseCors("AllowAngular");
+app.UseCors("TmsClient"); 
 app.UseAuthentication();
 app.UseAuthorization();
+// Session 2: Issue readable XSRF-TOKEN cookie for authenticated sessions
+app.Use(async (context, next) =>
+{
+    if (context.User.Identity?.IsAuthenticated == true || context.Request.Cookies.ContainsKey("tms_auth"))
+    {
+        var antiforgery = context.RequestServices.GetRequiredService<IAntiforgery>();
+        var tokens = antiforgery.GetAndStoreTokens(context);
+        context.Response.Cookies.Append("XSRF-TOKEN", tokens.RequestToken!,
+            new CookieOptions
+            {
+                HttpOnly = false, // MUST be false — Angular JS needs to read this
+                Secure = !builder.Environment.IsDevelopment(),
+                SameSite = SameSiteMode.Strict
+            });
+    }
+    await next(context);
+});
 app.UseMiddleware<V1DeprecationMiddleware>();
 app.UseRateLimiter();
 app.MapControllers();
-app.MapHub<TmsHub>("/hubs/tms");
-// 7. Environment-aware configuration
+app.MapHub<TmsHub>("/hubs/tms").RequireCors("TmsClient");// 7. Environment-aware configuration
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
