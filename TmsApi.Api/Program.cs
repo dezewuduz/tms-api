@@ -1,4 +1,9 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.IdentityModel.Tokens;
+using System.Text;
+using Microsoft.AspNetCore.Identity;      // for IdentityRole
+using TmsApi.Infrastructure.Identity;     //
 using Microsoft.Extensions.Caching.Hybrid;
 using TmsApi.Infrastructure.Persistence;
 using TmsApi.Domain.Entities;
@@ -27,7 +32,21 @@ var builder = WebApplication.CreateBuilder(args);
 
 // 1. Services
 builder.Services.AddAuthentication("Training")
-    .AddScheme<Microsoft.AspNetCore.Authentication.AuthenticationSchemeOptions, TrainingAuthHandler>("Training", null);
+    .AddScheme<Microsoft.AspNetCore.Authentication.AuthenticationSchemeOptions, TrainingAuthHandler>("Training", null)
+    .AddJwtBearer(options =>
+    {
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidateAudience = true,
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+            ValidIssuer = builder.Configuration["Jwt:Issuer"],
+            ValidAudience = builder.Configuration["Jwt:Audience"],
+            IssuerSigningKey = new SymmetricSecurityKey(
+                Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]!))
+        };
+    });
 builder.Services.AddAuthorization();
 builder.Services.AddControllers(options =>
 {
@@ -97,16 +116,30 @@ builder.Services.AddApiVersioning(options =>
     options.GroupNameFormat = "'v'VVV";
     options.SubstituteApiVersionInUrl = true;
 });
-// Register TmsDbContext scoped for incoming HTTP requests
 builder.Services.AddDbContext<TmsDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("TmsDatabase"))
            .LogTo(Console.WriteLine, LogLevel.Information)
            .EnableSensitiveDataLogging());
 
+// Session 1 (M11): ASP.NET Core Identity — password policy + lockout
+builder.Services.AddIdentityCore<TmsUser>(options =>
+{
+    options.Password.RequiredLength = 12;
+    options.Password.RequireUppercase = true;
+    options.Password.RequireDigit = true;
+    options.Password.RequireNonAlphanumeric = true;
+
+    options.Lockout.MaxFailedAccessAttempts = 5;
+    options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(15);
+    options.Lockout.AllowedForNewUsers = true;
+})
+.AddRoles<IdentityRole>()
+.AddEntityFrameworkStores<TmsDbContext>();
 // 2. DI Registration
 builder.Services.AddScoped<ICourseService, CourseService>();
 builder.Services.AddScoped<ICachedCourseService, CachedCourseService>();
 builder.Services.AddScoped<IEnrollmentService, EnrollmentService>();
+builder.Services.AddScoped<TokenService>();
 // 3. Options Registration (Exercise 3)
 builder.Services.AddOptions<PaymentOptions>()
     .Bind(builder.Configuration.GetSection("Payments"))
@@ -202,6 +235,13 @@ builder.Services.AddRateLimiter(options =>
     };
 });
 var app = builder.Build();
+/*var demo = new TmsApi.Infrastructure.Services.CryptoDemoService();
+var h1 = demo.HashUserPassword("Password123!");
+var h2 = demo.HashUserPassword("Password123!");
+Console.WriteLine($"Hash 1: {h1}");
+Console.WriteLine($"Hash 2: {h2}");
+Console.WriteLine($"Match1: {demo.VerifyUserPassword("Password123!", h1)}");
+Console.WriteLine($"Match2: {demo.VerifyUserPassword("Password123!", h2)}");*/
 // 5. Middleware Pipeline
 app.UseMiddleware<RequestLoggingMiddleware>();
 app.UseExceptionHandler();
@@ -290,8 +330,39 @@ using (var scope = app.Services.CreateScope())
 // 8. M6 Session 2: Seed 25 courses (Development only, idempotent)
 if (app.Environment.IsDevelopment())
 {
-using var scope = app.Services.CreateScope();
-var context = scope.ServiceProvider.GetRequiredService<TmsDbContext>();
-await DataSeeder.SeedAsync(context);
+    using var scope = app.Services.CreateScope();
+    var context = scope.ServiceProvider.GetRequiredService<TmsDbContext>();
+    await DataSeeder.SeedAsync(context);
+}
+
+// M11 Session 2: Seed a test admin user (Development only, idempotent)
+if (app.Environment.IsDevelopment())
+{
+    using var identityScope = app.Services.CreateScope();
+    var userManager = identityScope.ServiceProvider.GetRequiredService<UserManager<TmsUser>>();
+    var roleManager = identityScope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
+
+    if (!await roleManager.RoleExistsAsync("Admin"))
+    {
+        await roleManager.CreateAsync(new IdentityRole("Admin"));
+    }
+
+    var existingAdmin = await userManager.FindByNameAsync("admin");
+    if (existingAdmin == null)
+    {
+        var adminUser = new TmsUser
+        {
+            UserName = "admin",
+            Email = "admin@tms.local",
+            FirstName = "System",
+            LastName = "Admin",
+            EmailConfirmed = true
+        };
+        var result = await userManager.CreateAsync(adminUser, "Password123!");
+        if (result.Succeeded)
+        {
+            await userManager.AddToRoleAsync(adminUser, "Admin");
+        }
+    }
 }
 app.Run();

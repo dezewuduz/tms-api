@@ -1,45 +1,136 @@
+using Asp.Versioning;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using TmsApi.Application.DTOs;
+using TmsApi.Infrastructure.Identity;
+using TmsApi.Infrastructure.Persistence;
+using TmsApi.Infrastructure.Services;
+using TmsApi.Domain.Entities;
 
 namespace TmsApi.Api.Controllers;
 
 [ApiController]
-[Route("api/{version:apiVersion}/auth")]
+[Route("api/v{version:apiVersion}/auth")]
+[ApiVersion("1.0")]
 public class AuthController : ControllerBase
 {
-    [HttpPost("login")]
-    public IActionResult Login(
-        [FromBody] LoginRequest request,
-        [FromServices] IWebHostEnvironment env)
+    private readonly UserManager<TmsUser> _userManager;
+    private readonly RoleManager<IdentityRole> _roleManager;
+    private readonly TmsDbContext _context;
+    private readonly TokenService _tokenService;
+
+    public AuthController(
+        UserManager<TmsUser> userManager,
+        RoleManager<IdentityRole> roleManager,
+        TmsDbContext context,
+        TokenService tokenService)
     {
-        if (request.Username == "admin" && request.Password == "Password123!")
-        {
-            var dummyJwt = "header.payload.signature-demo-token";
-
-            Response.Cookies.Append("tms_auth", dummyJwt, new CookieOptions
-            {
-                HttpOnly = true,
-                Secure = !env.IsDevelopment(),
-                SameSite = SameSiteMode.Strict,
-                Expires = DateTimeOffset.UtcNow.AddHours(2)
-            });
-
-            return Ok(new UserProfileDto("System Admin", "Admin"));
-        }
-
-        return Unauthorized(new { detail = "Invalid username or password." });
+        _userManager = userManager;
+        _roleManager = roleManager;
+        _context = context;
+        _tokenService = tokenService;
     }
 
-    [HttpGet("me")]
-    public IActionResult GetCurrentUser()
+    [HttpPost("login")]
+    public async Task<IActionResult> Login([FromBody] LoginRequest request)
     {
-        if (Request.Cookies.TryGetValue("tms_auth", out _))
+        var user = await _userManager.FindByNameAsync(request.Username);
+        if (user == null)
         {
-            return Ok(new UserProfileDto("System Admin", "Admin"));
+            return Unauthorized(new { detail = "Invalid credentials." });
         }
 
-        return Unauthorized(new
+        if (await _userManager.IsLockedOutAsync(user))
         {
-            detail = "Session expired or missing authentication cookie."
+            return StatusCode(423, new { detail = "Account locked due to multiple failed login attempts." });
+        }
+
+        var validPassword = await _userManager.CheckPasswordAsync(user, request.Password);
+        if (!validPassword)
+        {
+            await _userManager.AccessFailedAsync(user);
+            return Unauthorized(new { detail = "Invalid credentials." });
+        }
+
+        await _userManager.ResetAccessFailedCountAsync(user);
+
+        var roles = await _userManager.GetRolesAsync(user);
+        var accessToken = _tokenService.GenerateJwt(user, roles);
+
+        var refreshToken = new RefreshToken
+        {
+            Token = Guid.NewGuid().ToString("N"),
+            UserId = user.Id,
+            ExpiresAt = DateTime.UtcNow.AddDays(7),
+            IsUsed = false,
+            IsRevoked = false
+        };
+        _context.RefreshTokens.Add(refreshToken);
+        await _context.SaveChangesAsync();
+
+        return Ok(new
+        {
+            accessToken,
+            refreshToken = refreshToken.Token
+        });
+    }
+
+    public record RefreshRequest(string RefreshToken);
+
+    [HttpPost("refresh")]
+    public async Task<IActionResult> Refresh([FromBody] RefreshRequest request)
+    {
+        var storedToken = await _context.RefreshTokens
+            .FirstOrDefaultAsync(rt => rt.Token == request.RefreshToken);
+
+        if (storedToken == null)
+        {
+            return Unauthorized(new { detail = "Invalid refresh token." });
+        }
+
+        // Theft Detection: If an ALREADY-USED token is submitted, revoke ALL tokens for this user!
+        if (storedToken.IsUsed)
+        {
+            var userTokens = await _context.RefreshTokens
+                .Where(rt => rt.UserId == storedToken.UserId)
+                .ToListAsync();
+            foreach (var t in userTokens)
+            {
+                t.IsRevoked = true;
+            }
+            await _context.SaveChangesAsync();
+            return Unauthorized(new { detail = "Token theft detected. All user sessions revoked." });
+        }
+
+        if (storedToken.IsRevoked || storedToken.ExpiresAt < DateTime.UtcNow)
+        {
+            return Unauthorized(new { detail = "Refresh token expired or revoked." });
+        }
+
+        // Mark current token as used
+        storedToken.IsUsed = true;
+
+        // Issue brand-new Refresh Token pair
+        var newRefreshToken = new RefreshToken
+        {
+            Token = Guid.NewGuid().ToString("N"),
+            UserId = storedToken.UserId,
+            ExpiresAt = DateTime.UtcNow.AddDays(7),
+            IsUsed = false,
+            IsRevoked = false
+        };
+        _context.RefreshTokens.Add(newRefreshToken);
+        await _context.SaveChangesAsync();
+
+        var user = await _userManager.FindByIdAsync(storedToken.UserId);
+        var roles = await _userManager.GetRolesAsync(user!);
+        var newAccessToken = _tokenService.GenerateJwt(user!, roles);
+
+        return Ok(new
+        {
+            accessToken = newAccessToken,
+            refreshToken = newRefreshToken.Token
         });
     }
 }
