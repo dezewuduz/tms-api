@@ -1,3 +1,5 @@
+using System.Security.Claims;
+using Microsoft.AspNetCore.Authorization;   
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Routing;   
@@ -14,7 +16,8 @@ namespace TmsApi.Api.Controllers;
 public class CoursesController(
     ICourseService courseService,
     ICachedCourseService cachedCourseService,
-    LinkGenerator linkGenerator) : ControllerBase
+    LinkGenerator linkGenerator,
+    IAuthorizationService authorizationService) : ControllerBase
 {
     [HttpGet("{id:int}", Name = nameof(GetCourseById))]
     [ProducesResponseType(typeof(CourseDetailDto), StatusCodes.Status200OK)]
@@ -74,18 +77,39 @@ public class CoursesController(
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
     [EndpointSummary("Create a new course")]
     [EndpointDescription("Creates a course with a unique code. Returns 409 if the course code already exists.")]
-    public async Task<IActionResult> CreateCourse([FromBody] CreateCourseRequest request, CancellationToken ct)
-    {
-        if (await courseService.CodeExistsAsync(request.Code, ct))
-            return Conflict(new ProblemDetails
-            {
-                Title = "Course code already exists",
-                Detail = $"A course with code '{request.Code}' is already registered.",
-                Status = StatusCodes.Status409Conflict
-            });
+   public async Task<IActionResult> CreateCourse([FromBody] CreateCourseRequest request, CancellationToken ct)
+{
+    if (await courseService.CodeExistsAsync(request.Code, ct))
+        return Conflict(new ProblemDetails
+        {
+            Title = "Course code already exists",
+            Detail = $"A course with code '{request.Code}' is already registered.",
+            Status = StatusCodes.Status409Conflict
+        });
 
-        var result = await courseService.CreateAsync(request, ct);
+    var instructorId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+    var result = await courseService.CreateAsync(request, instructorId, ct);
+    await cachedCourseService.InvalidateCourseCacheAsync(ct);
+    return CreatedAtAction(nameof(GetCourseById), new { id = result.Id }, result);
+}
+
+   [HttpPut("{id:int}")]
+[Authorize(AuthenticationSchemes = "Bearer")]
+    [ProducesResponseType(typeof(CourseResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [EndpointSummary("Update a course")]
+    [EndpointDescription("Updates a course. Only the owning instructor or an Admin may edit it.")]
+    public async Task<IActionResult> UpdateCourse(int id, [FromBody] CreateCourseRequest request, CancellationToken ct)
+    {
+        var course = await courseService.GetEntityByIdAsync(id, ct);
+        if (course is null) return NotFound();
+
+        var authResult = await authorizationService.AuthorizeAsync(User, course, "CanEditCourse");
+        if (!authResult.Succeeded) return Forbid();
+
+        var updated = await courseService.UpdateAsync(id, request, ct);
         await cachedCourseService.InvalidateCourseCacheAsync(ct);
-        return CreatedAtAction(nameof(GetCourseById), new { id = result.Id }, result);
+        return Ok(updated);
     }
 }

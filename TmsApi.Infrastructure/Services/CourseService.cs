@@ -16,21 +16,20 @@ public class CourseService(TmsDbContext context, ILogger<CourseService> logger) 
             .Select(c => new CourseResponseDto(
                 c.Id, c.Code, c.Title, c.MaxCapacity, c.Enrollments.Count))
             .FirstOrDefaultAsync(ct);
-
-    public async Task<CourseResponseDto> CreateAsync(CreateCourseRequest request, CancellationToken ct)
+public async Task<CourseResponseDto> CreateAsync(CreateCourseRequest request, string instructorId, CancellationToken ct)
+{
+    var course = new Course
     {
-        var course = new Course
-        {
-            Code = request.Code,
-            Title = request.Title,
-            MaxCapacity = request.MaxCapacity
-        };
-        context.Courses.Add(course);
-        await context.SaveChangesAsync(ct);
-        logger.LogInformation("Created course {CourseId} ({Code})", course.Id, course.Code);
-        return (await GetByIdAsync(course.Id, ct))!;
-    }
-
+        Code = request.Code,
+        Title = request.Title,
+        MaxCapacity = request.MaxCapacity,
+        InstructorId = instructorId
+    };
+    context.Courses.Add(course);
+    await context.SaveChangesAsync(ct);
+    logger.LogInformation("Created course {CourseId} ({Code})", course.Id, course.Code);
+    return (await GetByIdAsync(course.Id, ct))!;
+}
     public Task<bool> CodeExistsAsync(string code, CancellationToken ct) =>
         context.Courses.AsNoTracking().AnyAsync(c => c.Code == code, ct);
 
@@ -81,4 +80,22 @@ public class CourseService(TmsDbContext context, ILogger<CourseService> logger) 
         PageSize = request.PageSize
     };
 }
+
+    public Task<Course?> GetEntityByIdAsync(int id, CancellationToken ct) =>
+        context.Courses.FirstOrDefaultAsync(c => c.Id == id, ct);
+
+    public async Task<CourseResponseDto?> UpdateAsync(int id, CreateCourseRequest request, CancellationToken ct)
+    {
+        var course = await context.Courses.FirstOrDefaultAsync(c => c.Id == id, ct);
+        if (course is null) return null;
+
+        course.Code = request.Code;
+        course.Title = request.Title;
+        course.MaxCapacity = request.MaxCapacity;
+
+        await context.SaveChangesAsync(ct);
+        logger.LogInformation("Updated course {CourseId} ({Code})", course.Id, course.Code);
+
+        return await GetByIdAsync(course.Id, ct);
+    }
 }

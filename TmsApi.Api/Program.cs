@@ -1,10 +1,12 @@
 using Microsoft.EntityFrameworkCore;
+using TmsApi.Api.Authorization;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
-using Microsoft.AspNetCore.Identity;      // for IdentityRole
-using TmsApi.Infrastructure.Identity;     //
-using Microsoft.Extensions.Caching.Hybrid;
+using Microsoft.AspNetCore.Identity;      
+using TmsApi.Infrastructure.Identity;     
 using TmsApi.Infrastructure.Persistence;
 using TmsApi.Domain.Entities;
 using TmsApi.Infrastructure.Services;
@@ -19,7 +21,7 @@ using TmsApi.Application.Behaviors;
 using TmsApi.Application.Enrollments.Commands;
 using TmsApi.Api.ExceptionHandlers;
 using System.Threading.RateLimiting;
-using Microsoft.AspNetCore.Antiforgery;   // ← add this line
+using Microsoft.AspNetCore.Antiforgery;   
 using Microsoft.AspNetCore.RateLimiting;
 using TmsApi.Api.RateLimiting;
 using Microsoft.AspNetCore.Mvc;
@@ -47,7 +49,12 @@ builder.Services.AddAuthentication("Training")
                 Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]!))
         };
     });
-builder.Services.AddAuthorization();
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy("CanEditCourse", policy =>
+        policy.Requirements.Add(new CourseOwnerRequirement()));
+});
+builder.Services.AddScoped<IAuthorizationHandler, CourseOwnerAuthorizationHandler>();
 builder.Services.AddControllers(options =>
 {
     options.Filters.Add<AuditLogFilter>();
@@ -160,21 +167,23 @@ builder.Services.AddHybridCache(options =>
         LocalCacheExpiration = TimeSpan.FromMinutes(2)
     };
 });
-// Production-only — leave commented in lab
-// builder.Services.AddStackExchangeRedisCache(options =>
-// {
-//     options.Configuration = builder.Configuration.GetConnectionString("Redis");
-//     options.InstanceName = "tms:";
-// });
-// builder.Services.AddHybridCache();
+
 builder.Services.AddRateLimiter(options =>
 {
+    options.AddFixedWindowLimiter("AuthLimiter", opt =>
+    {
+        opt.PermitLimit = 5;
+        opt.Window = TimeSpan.FromMinutes(1);
+        opt.QueueLimit = 0;
+    });
+
     options.AddConcurrencyLimiter("transcripts", opt =>
-{
-    opt.PermitLimit = 5;
-    opt.QueueLimit = 20;
-    opt.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
-});
+    {
+        opt.PermitLimit = 5;
+        opt.QueueLimit = 20;
+        opt.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
+    });
+
     options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(httpContext =>
     {
         var (partitionKey, tier) = ApiKeyResolver.Resolve(httpContext);
@@ -235,18 +244,30 @@ builder.Services.AddRateLimiter(options =>
     };
 });
 var app = builder.Build();
-/*var demo = new TmsApi.Infrastructure.Services.CryptoDemoService();
-var h1 = demo.HashUserPassword("Password123!");
-var h2 = demo.HashUserPassword("Password123!");
-Console.WriteLine($"Hash 1: {h1}");
-Console.WriteLine($"Hash 2: {h2}");
-Console.WriteLine($"Match1: {demo.VerifyUserPassword("Password123!", h1)}");
-Console.WriteLine($"Match2: {demo.VerifyUserPassword("Password123!", h2)}");*/
-// 5. Middleware Pipeline
+
+// Exercise 7 Step 2: Security response headers — add this first, applies to every response
+app.Use(async (context, next) =>
+{
+    context.Response.Headers.Append("X-Content-Type-Options", "nosniff");
+    context.Response.Headers.Append("X-Frame-Options", "DENY");
+    context.Response.Headers.Append("Referrer-Policy", "strict-origin-when-cross-origin");
+
+    // Skip CSP for Scalar/OpenAPI dev docs so the tool can render its inline scripts
+    if (!context.Request.Path.StartsWithSegments("/scalar") &&
+        !context.Request.Path.StartsWithSegments("/openapi"))
+    {
+        context.Response.Headers.Append(
+            "Content-Security-Policy",
+            "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline';");
+    }
+
+    await next();
+});
 app.UseMiddleware<RequestLoggingMiddleware>();
 app.UseExceptionHandler();
 app.UseStatusCodePages();
 app.UseRouting();
+app.UseRateLimiter();
 app.UseCors("TmsClient"); 
 app.UseAuthentication();
 app.UseAuthorization();
@@ -268,9 +289,8 @@ app.Use(async (context, next) =>
     await next(context);
 });
 app.UseMiddleware<V1DeprecationMiddleware>();
-app.UseRateLimiter();
 app.MapControllers();
-app.MapHub<TmsHub>("/hubs/tms").RequireCors("TmsClient");// 7. Environment-aware configuration
+app.MapHub<TmsHub>("/hubs/tms").RequireCors("TmsClient");
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
@@ -301,7 +321,10 @@ app.MapGet("/api/error", () =>
 using (var scope = app.Services.CreateScope())
 {
     var context = scope.ServiceProvider.GetRequiredService<TmsDbContext>();
-    context.Database.Migrate();
+    if (context.Database.IsRelational())
+    {
+        context.Database.Migrate();
+    }
 
     // ONE-TIME FIX: Set empty Status values to "Pending" (from AddEnrollmentStatus migration default)
     var emptyStatusEnrollments = context.Enrollments.Where(e => e.Status == "").ToList();
@@ -327,26 +350,18 @@ using (var scope = app.Services.CreateScope())
 
     }
 }
-// 8. M6 Session 2: Seed 25 courses (Development only, idempotent)
-if (app.Environment.IsDevelopment())
-{
-    using var scope = app.Services.CreateScope();
-    var context = scope.ServiceProvider.GetRequiredService<TmsDbContext>();
-    await DataSeeder.SeedAsync(context);
-}
 
-// M11 Session 2: Seed a test admin user (Development only, idempotent)
 if (app.Environment.IsDevelopment())
 {
     using var identityScope = app.Services.CreateScope();
     var userManager = identityScope.ServiceProvider.GetRequiredService<UserManager<TmsUser>>();
     var roleManager = identityScope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
 
+    // Seed Admin role + user
     if (!await roleManager.RoleExistsAsync("Admin"))
     {
         await roleManager.CreateAsync(new IdentityRole("Admin"));
     }
-
     var existingAdmin = await userManager.FindByNameAsync("admin");
     if (existingAdmin == null)
     {
@@ -358,11 +373,42 @@ if (app.Environment.IsDevelopment())
             LastName = "Admin",
             EmailConfirmed = true
         };
-        var result = await userManager.CreateAsync(adminUser, "Password123!");
-        if (result.Succeeded)
+        var adminResult = await userManager.CreateAsync(adminUser, "Password123!");
+        if (adminResult.Succeeded)
         {
             await userManager.AddToRoleAsync(adminUser, "Admin");
         }
     }
+
+    // Seed Instructor role + user
+    if (!await roleManager.RoleExistsAsync("Instructor"))
+    {
+        await roleManager.CreateAsync(new IdentityRole("Instructor"));
+    }
+    var existingInstructor = await userManager.FindByNameAsync("instructor1");
+    if (existingInstructor == null)
+    {
+        var instructorUser = new TmsUser
+        {
+            UserName = "instructor1",
+            Email = "instructor1@tms.local",
+            FirstName = "Jane",
+            LastName = "Doe",
+            EmailConfirmed = true
+        };
+        var instructorResult = await userManager.CreateAsync(instructorUser, "Password123!");
+        if (instructorResult.Succeeded)
+        {
+            await userManager.AddToRoleAsync(instructorUser, "Instructor");
+        }
+    }
+
+    // Seed courses, owned by the instructor we just created
+    var instructor = await userManager.FindByNameAsync("instructor1");
+    using var courseScope = app.Services.CreateScope();
+    var courseContext = courseScope.ServiceProvider.GetRequiredService<TmsDbContext>();
+    await DataSeeder.SeedAsync(courseContext, instructor!.Id);
 }
+
 app.Run();
+public partial class Program { }
