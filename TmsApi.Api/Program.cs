@@ -347,6 +347,7 @@ using (var scope = app.Services.CreateScope())
             new() { RegistrationNumber = "TMS-2026-0005", Name = "Evan Wright", GPA = 2.5m, IsActive = true }
         };
         context.Students.AddRange(students);
+            context.SaveChanges();   // this is a new line
 
     }
 }
@@ -408,6 +409,23 @@ if (app.Environment.IsDevelopment())
     using var courseScope = app.Services.CreateScope();
     var courseContext = courseScope.ServiceProvider.GetRequiredService<TmsDbContext>();
     await DataSeeder.SeedAsync(courseContext, instructor!.Id);
+
+    // Seed a pending enrollment for E2E tests
+    if (!await courseContext.Enrollments.AnyAsync(e => e.Status == "Pending"))
+    {
+        var student = await courseContext.Students.FirstOrDefaultAsync();
+        var course = await courseContext.Courses.FirstOrDefaultAsync();
+        if (student != null && course != null)
+        {
+            courseContext.Enrollments.Add(new Enrollment
+            {
+                StudentId = student.Id,
+                CourseId = course.Id,
+                Status = "Pending"
+            });
+            await courseContext.SaveChangesAsync();
+        }
+    }
 }
 
 app.Run();
